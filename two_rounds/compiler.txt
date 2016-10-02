@@ -1,0 +1,1 @@
+gcc -Wall two_rounds.c menu.c bootstrap.c md5.c func_strutture.c general_functions.c sincronization.c dispatcher_inf.c dispatcher_msg.c dispatcher_servboot.c  process_InOut.c process_RG_RS.c exit.c -lpthread -o two_rounds

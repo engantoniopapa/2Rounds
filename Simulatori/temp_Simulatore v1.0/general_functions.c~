@@ -1,0 +1,349 @@
+#include "simulator.h"
+#include "general_functions.h"
+
+
+
+void init(struct nodo *a )// inizializza le strutture 
+{
+	int i , j ;
+	for( i = 0 ; i <  _NUM_NODI ; ++i)
+	{
+		for(j = 0 ; j < _MAX_AGE ; ++j) 
+		{
+			resetListAge(&a[i] , j );
+		}
+		resetArrivi( &a[i]) ;
+		resetBuffer(&a[i]) ;
+	}
+
+}
+
+
+int num_random(int num) // genera un numero random da 0 a num-1
+{
+	
+	int a;
+  a =(int)( num * (rand()/(RAND_MAX+1.0)));
+  return a;
+
+}
+
+void agePlusOne(struct nodo *a) // incrementa di 1 l'age del nodo
+{
+	resetListAge( a , _MAX_AGE -1 ) ;
+	struct listaAge temp;
+	
+	temp	 = a->neighbour.nodiAge[_MAX_AGE -1];
+
+	int i ;
+	for( i = _MAX_AGE -1 ; i > 0 ; --i)
+	{
+  	a->neighbour.nodiAge[i] = a->neighbour.nodiAge[i-1] ;
+	}
+	a->neighbour.nodiAge[0] =  temp ;
+	
+	for( i = 0 ; i < _VISTA_AGE ; i++)
+	{
+		a->neighbour.nodiAge[0].nodi_vicini[i] = a->buffer_arrivi[i];
+	}
+	
+	resetArrivi( a) ;
+
+}
+
+
+void resetListAge(struct nodo *a , int index) // resetto una lista di vicini che hanno la stessa age
+{
+	int i ;
+	for(i = 0  ; i < _VISTA_AGE ; ++i)
+	{
+		a->neighbour.nodiAge[index].nodi_vicini[i] = -1 ;
+	}	
+
+}
+
+void resetArrivi(struct nodo *a ) // resetto il buffer degli arrivi
+{
+	int i ;
+	for(i = 0  ; i < _VISTA_AGE ; ++i)
+	{
+		a->buffer_arrivi[i] = -1 ;
+	}	
+
+}
+
+void resetBuffer(struct nodo *a ) // resetto il buffer del fanout
+{
+	int i ;
+	for(i = 0  ; i < _FANOUT ; ++i)
+	{
+		a->buffer_fanout[i] = -1 ;
+	}	
+
+}
+
+
+void initX(struct X *x) // inizializzo la struttura della variabile aleatoria X
+{
+	int i  ;
+	
+	for(i = 0 ; i < _MAX_AGE ; ++i)
+	{
+		 x->intorno[i] = 0 ;
+	}
+	
+	if( _MAX_AGE >= 1)
+	{
+		x->estremo = (_P0 * _BIG_NUM ) ;
+		x->intorno[0] =  (_P0 * _BIG_NUM );
+	}
+
+	if( _MAX_AGE >= 2)
+	{
+		x->estremo = x->estremo + (_P1 * _BIG_NUM ) ;
+		x->intorno[1] = x->estremo  ;
+	}
+	
+	if( _MAX_AGE >= 3)
+	{
+		x->estremo = x->estremo + (_P2 * _BIG_NUM ) ;
+		x->intorno[2] = x->estremo  ;
+	}
+	
+	double temp;
+	for( i = 4 ; i <= _MAX_AGE ; ++i)
+	{
+		temp = (   ((double) 1)    /   (2 * i)    ) * _BIG_NUM;
+		//printf("temp = %f\n" , temp );
+		x->estremo = x->estremo + temp ;
+		x->intorno[i-1] = x->estremo ;
+	}
+	
+	
+	printf ("estremo = %d\n" , x->estremo );
+
+	for(i = 0 ; i < _MAX_AGE ; ++i)
+	{
+		printf("x[%d] = %d\n" , i , x->intorno[i]) ;
+
+	}
+}
+
+
+void createFanout(struct nodo *a ,  struct X *x ) // inizializzo il buffer fanout
+{
+	int i , j , w , b, age , temp_nodo;
+	int buffer[_FANOUT];
+	//printf(" nodo[%d]-->[", a->id_nodo);
+	for( i = 0 ; i < _FANOUT ; ++i)
+	{
+		buffer[i] = 1 + num_random(x->estremo);
+		age = -1;
+		
+		for( j = 0 ; j < _MAX_AGE ; ++j)
+		{
+			if( buffer[i] <= x->intorno[j] )
+			{
+				age = j ;
+				j = _MAX_AGE ;
+			}
+		}
+
+		if( age < 0)
+		{	
+			printf("errore nel trovare age\n");
+			exit(0);
+		}
+		
+		b = 1;
+		for( j = 0 ; j < 15 && b; j++)
+		{ 	b = 0 ;
+				temp_nodo = random_neighbour(age , a ) ;
+				for( w = 0 ; w < _FANOUT ; w++)
+				{
+						if( a->buffer_fanout[w] == temp_nodo )
+						b = 1;
+				}
+				
+		}
+		if(temp_nodo == -1)
+		{	
+			--i;
+		}
+		else
+		{
+			a->buffer_fanout[i] = temp_nodo ;
+			//printf("|%d" , temp_nodo);
+		}
+		
+	}
+	//printf("|]\n");
+}
+
+int random_neighbour(int age , struct nodo *a) // scelgo random alcuni nodi avvalendomi anche 
+{																								//delle informazioni contenute nella struttura X
+	int i , index_nodo;
+	int limit = 0 ;
+
+	
+	for( i = 0 ; i < _VISTA_AGE ; ++i)
+	{
+		if(a->neighbour.nodiAge[age].nodi_vicini[i] == -1)
+		{
+			i = 2*_FANOUT;
+		}
+		else
+		{
+			++limit;
+			
+		}
+	}	
+	//printf("--age %d limite %d --", age , limit);
+	if( limit == 0 )
+		return -1;
+	else
+	{
+		index_nodo = num_random(limit) ;
+		return a->neighbour.nodiAge[age].nodi_vicini[index_nodo];
+	}
+
+}
+
+void gossip_informations(struct nodo *origine ,struct nodo *a ,  struct X *x )
+{
+	int temp_nodo , i;
+	for( i = 0 ; i < _FANOUT ; ++i)
+	{	//printf("\n");
+		temp_nodo = a->buffer_fanout[i];
+		//printf("temp nodo %d\n" ,temp_nodo);
+		ins_buffer_arrivi( &origine[temp_nodo] , a->id_nodo);
+		random_vicini_gossip(&origine[temp_nodo] , a , x);
+	}
+
+}
+
+
+void random_vicini_gossip( struct nodo *ric  , struct nodo *mit , struct X *x)
+{
+	int i , j, age , temp_event , temp_nodo;
+	//printf("[%d][m%d] " , mit->id_nodo , ric->id_nodo);
+	for( i = 0 ; i < _GOSSIP_NODI ; i++)
+	{
+		temp_event = 1 + num_random(x->estremo);
+		age = -1;
+		
+		for( j = 0 ; j < _MAX_AGE ; ++j)
+		{
+			if( temp_event <= x->intorno[j] )
+			{
+				age = j ;
+				j = _MAX_AGE ;
+			}
+		}
+		
+		if( age < 0)
+		{	
+			printf("errore nel trovare age\n");
+			exit(0);
+		}
+		
+		temp_nodo = random_neighbour(age , mit ) ;
+		
+		if(temp_nodo == -1)
+		{	
+			--i;
+		}
+		else
+		{			
+					
+			ins_nodo( ric , age , temp_nodo);
+		}
+	}
+}
+
+void ins_nodo(struct nodo *a , int age ,  int temp_nodo )
+{
+	int i ; 
+	int index = -1;
+	for( i = 0 ; i < _VISTA_AGE ; i++)
+	{
+		if( a->neighbour.nodiAge[age].nodi_vicini[i] == -1)
+		{	
+			index = i ;
+			i = _VISTA_AGE;
+		}
+	}
+	
+	if( index == -1 )
+	{
+		index = num_random(_VISTA_AGE);
+		a->neighbour.nodiAge[age].nodi_vicini[index] = temp_nodo;
+	}
+	else
+	{
+		a->neighbour.nodiAge[age].nodi_vicini[index] = temp_nodo;
+
+	}
+	//printf("--age%d[%d]%d--",age, index, temp_nodo);
+
+}
+
+
+void ins_buffer_arrivi(struct nodo *a ,  int temp_nodo )
+{
+	int i ; 
+	int index = -1;
+	for( i = 0 ; i < _FANOUT ; i++)
+	{
+		if( a->buffer_arrivi[i] == -1)
+		{	
+			index = i ;
+			i = _FANOUT;
+		}
+	}
+	if( index == -1 )
+	{
+		index = num_random(_FANOUT);
+		a->buffer_arrivi[index] = temp_nodo;
+	}
+	else
+	{
+		 a->buffer_arrivi[index] = temp_nodo;
+
+	}
+
+}
+
+
+void stampaNodo( struct nodo *a) // stampo le informazioni di un nodo
+{
+		int i , j ;
+		printf("\n\n------------------------\n");
+		printf("id = %d\n" , a->id_nodo);
+		
+		printf("buffer_arrivi[| ");
+		for( i = 0 ; i < _VISTA_AGE ; ++i)
+		{	
+			printf("%d|" , a->buffer_arrivi[i]);
+		}
+		printf("]\n");
+
+		printf("buffer_fanout[| ");
+		for( i = 0 ; i < _FANOUT ; ++i)
+		{	
+			printf("%d|" , a->buffer_fanout[i]);
+		}
+		printf("]\n");
+
+		printf("\n buffer Age Nodi:");
+		for( i = 0 ; i < _MAX_AGE ; i++)
+		{
+			printf("\nbuffer Age[%d] --> [|" , i);
+			for(j = 0 ; j < _VISTA_AGE ; j++)
+			{
+				printf("%d|" , a->neighbour.nodiAge[i].nodi_vicini[j]);
+			}
+			printf("]");
+		}
+		printf("\n");
+}

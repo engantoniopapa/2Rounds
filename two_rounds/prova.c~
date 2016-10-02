@@ -1,0 +1,182 @@
+#include "header.h"
+
+
+#define BACKLOG              10
+#define NUM_THREADS           5
+#define MAXLINE              1024
+
+struct MSM
+{
+	int tipo;
+	char message[MAXLINE];
+	int length;
+};
+typedef struct MSM MSM ;
+
+
+struct dati_disp
+{
+	int th ;
+	int listensd;
+};
+typedef struct dati_disp dati_disp;
+
+
+Semaphore *mutex;
+
+void *func_dispatcher(void *);
+void addr_init (struct sockaddr_in *, int , long int ) ; 
+void *func_helper(void *);
+void  printf_MSM( MSM * , int  ) ;
+
+
+
+
+int main()
+{
+	pthread_t dispatcher;
+	int rc;
+	mutex = make_semaphore(1) ;
+
+	rc = pthread_create (&dispatcher, NULL, func_dispatcher, (void *)dispatcher);
+	if (rc)
+	{
+   	printf("ERROR; return code from pthread_create() is %d\n",rc);
+   	exit(-1);
+	}
+
+	pthread_join(dispatcher, NULL );
+	return 0;
+}
+
+
+// Inizializzazione della variabile sockaddr_in
+void addr_init(struct sockaddr_in *addr, int port, long int ip)  
+{
+        addr->sin_family=AF_INET;
+        addr->sin_port = htons ((u_short) port);
+        addr->sin_addr.s_addr=ip;
+}
+
+
+
+
+void *func_dispatcher(void *dispatcher)
+{
+	int disp_thr = (int) dispatcher;
+
+	int listensd ;
+  struct sockaddr_in servaddr ;
+  int t ;
+
+	if ((listensd = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
+  {
+  	perror("errore in socket");
+  	exit(1); 
+  }
+
+	memset((char *)&servaddr, 0, sizeof(servaddr));
+
+	addr_init (&servaddr,PORT1,INADDR_ANY);
+
+
+	if (bind(listensd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0) 
+  {
+  	perror("errore in bind");
+ 		exit(1); 
+  }
+
+  if (listen(listensd, BACKLOG) < 0 ) 
+  {
+  	perror("errore in listen");
+  	exit(1);
+  }
+	
+	  printf ("Server in ascolto sulla porta %d\n",PORT1);
+
+		pthread_t threads[NUM_THREADS];
+
+		
+	
+		for(t=0;t < NUM_THREADS;t++)
+		{
+			int rc ;
+			dati_disp *dati;
+			dati = (dati_disp *)malloc(sizeof(dati_disp));
+			dati->listensd = listensd;	
+			dati->th = t ;
+
+    	printf("Creating thread %d\n",pthread_self() );
+			
+    	rc = pthread_create (&threads[t], NULL, func_helper, (void *)dati);
+    	if (rc)
+			{
+       	printf("ERROR; return code from pthread_create() is %d\n",rc);
+       	exit(-1);
+    	}
+  	}
+
+		for(t=0;t < NUM_THREADS;t++)
+		{
+    	pthread_join(threads[t], NULL );
+  	}				
+		close(listensd);
+}
+
+
+void *func_helper(void *d)
+{
+	
+	dati_disp *dati = (dati_disp *) d ;
+	
+	int listensd = dati->listensd ;
+	int threadid = dati->th ;
+
+	 
+	free(dati);
+
+
+	
+	int                 connsd;
+	struct sockaddr_in cliaddr;
+  int                len;
+	MSM *buff;	
+
+	len = sizeof(struct sockaddr_in);
+		
+	for ( ; ; ) 
+	{
+		memset((char *)&cliaddr, 0, len);
+		
+		sem_wait(mutex);
+			if ((connsd = accept(listensd, (struct sockaddr *)&cliaddr, &len)) < 0) 
+			{
+   			perror("errore in accept");
+   			exit(1);
+ 			}
+		sem_post(mutex);
+		
+		// Alloco memoria per ricevere la stringa
+    buff = (MSM*) malloc(sizeof(MSM));
+
+    // Ricevo la stringa
+    recv(connsd,buff,sizeof(MSM),0);
+
+    // Scrivo su stdout la stringa appena ricevuta
+    printf_MSM(buff , threadid);
+
+		free(buff);
+		
+		close(connsd);
+	}
+}
+
+
+void  printf_MSM( MSM *buff , int threadid )
+{
+			printf("-------------\n");
+		
+			printf("--threadid = %d :\n" , threadid );
+			printf("stampa MSM ricevuto\n");
+			printf("tipo: %d --- messaggio: %s --- length: %d \n\n" , buff->tipo ,  buff->message ,  buff->length );
+}

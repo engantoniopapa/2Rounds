@@ -1,0 +1,2 @@
+gcc -Wall -o server main.c func_strutture.c sincronization.c general_functions.c dispatcher_servboot.c -lpthread
+

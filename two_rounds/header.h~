@@ -1,0 +1,88 @@
+#include <stdlib.h>      /* C standard library */
+#include <stdio.h>	 /* standard I/O library */
+#include <string.h>      /* string functions */
+#include <unistd.h>
+#include <sys/types.h> 
+#include <sys/stat.h> 
+#include <fcntl.h> 
+#include <ctype.h>
+#include <dirent.h> 
+#include <time.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <math.h>
+#include <semaphore.h>
+#include <pthread.h>
+
+#include "bootstrap.h"
+#include "func_strutture.h"
+#include "general_functions.h"
+#include "md5.h"
+#include "menu.h"
+#include "sincronization.h"
+#include "strutture.h"
+#include "dispatcher_inf.h"
+#include "dispatcher_msg.h"
+#include "dispatcher_servboot.h"
+#include "process_InOut.h"
+#include "process_RG_RS.h"
+#include "exit.h"
+
+//------buffer-------------------------
+Buffer_File *buffer_file ;
+X *var_x;
+Buffer_neighbour *buffer_neighbour;
+Buffer_fanout *buffer_fanout;
+Buffer_message *buffer_message;
+Buffer_Bye_Peer *buffer_bye_peer
+Buffer_event *buffer_event;
+Buffer_rs *ptr_snd_rs;
+Buffer_rs *ptr_rcv_rs;
+Buffer_rg *buffer_rg;
+
+
+//------strutture di sincronizzazione--------
+Semaphore *sem_accept_msg; // mutex per il lock sull'accept
+Semaphore *sem_accept_inf;	// mutex per il lock sull'accept
+Semaphore *sem_accept_servboot;	// mutex per il lock sull'accept
+Two_rooms *sem_id; //mutex sulla creazione degli Id message
+Writers_Reader *sem_neighbour; //struttura di sincronizzazione sul buffer neighbour
+Two_rooms *sem_rs; // struttura di sincronizzazione sul buffer_rs solo la parte per la ricezione
+Two_rooms *sem_message; //struttura di sincronizzazione sul buffer message
+Semaphore *sem_rs_bis; // mutex sul buffer rs per l'invio dei messaggi
+Writers_Reader *sem_bye_peer; //struttura di sincronizzazione sul buffer bye_peer
+Two_rooms *sem_event; //struttura di sincronizzazione sul buffer event
+Semaphore *sem_stdin; //mutex per l'uso dello stream file stdin
+Semaphore *sem_stdout; //mutexo per l'uso dello stream file stdout
+Semaphore *sem_exit_msg; // signal per la terminazione del dispatcher_msg
+Semaphore *sem_exit_servboot; // signal per la terminazione del dispatcher_serverboot
+Semaphore *sem_exit_inf;// signal per la terminazione del dispatcher_inf
+Semaphore *sem_exit_rg;// mutex per l'accesso alla varibile exit_rg
+short int exit_rg; //varibile per segnalare l'uscita al processo rg 
+Semaphore *sem_exit_main; // signal per la terminazione del main
+Semaphore *sem_init_inf ; //signal per la fine dell'inizializzazione del bootstrap del dispatcher_inf
+Semaphore *sem_init_msg ; //signal per la fine dell'inizializzazione del bootstrap del dispatcher_msg
+Semaphore *sem_init_servboot; //signal per la fine dell'inizializzazione del bootstrap del dispatcher_servboot
+Semaphore *sem_input;  //inizializzazione signal per le max ricerche contemporanee
+Two_rooms *sem_th_out; //struttura di sincronizzazione per lettura/scrittura sull'array th_out 
+pthread_t th_out[_MAX_EVT];
+
+
+pthread_t th_disp_inf;
+pthread_t th_disp_msg;
+pthread_t th_disp_servboot;
+pthread_t th_rg;
+pthread_t th_rs;
+pthread_t th_in ;
+pthread_t th_exit;
+
+in_port_t *my_port;
+struct in_addr *my_ip;
+char *id_msg_inf;
+char *id_msg_servboot;
+char *id_msg_const;
+unsigned int id_count_msg;
+

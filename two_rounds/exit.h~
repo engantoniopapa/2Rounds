@@ -1,0 +1,4 @@
+
+
+void *proc_exit_all();
+void free_all();

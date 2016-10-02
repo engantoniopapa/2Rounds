@@ -1,0 +1,22 @@
+#ifndef TWO_ROUNDS_H
+#define TWO_ROUNDS_H
+
+
+
+
+
+
+
+
+
+#include "md5.h"
+#include "strutture.h"
+#include "sincronization.h"
+#include "general_functions.h"
+
+
+
+
+ 
+
+#endif

@@ -1,0 +1,18 @@
+#ifndef STRUTTURE_H
+#define STRUTTURE_H
+
+
+
+
+
+
+
+#endif
+
+#ifndef _THREAD_SAFE
+#define _THREAD_SAFE
+#endif
+
+#ifndef _REENTRANT
+#define _REENTRANT
+#endif

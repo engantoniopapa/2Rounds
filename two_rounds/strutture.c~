@@ -1,0 +1,423 @@
+#include "strutture.h"
+
+
+
+//------------------- Buffer MyFile ---------------------------------------------
+
+Buffer_File *init_buffer_file()
+{
+	Buffer_File *b;
+	b = ( Buffer_File *) malloc(sizeof(Buffer_File));
+	b->index = 0 ;
+	return b;
+		printf( "index = %d \n" , b->index );
+}
+
+int file_cond(Buffer_File * buffer_file)
+{
+
+	int sorgente;
+	int b , i;
+	char c[2];
+	char percorso[100];
+	percorso[0] = '\0';
+	c[1] = '\0';
+	sorgente = open( "setting.txt" , O_RDONLY);
+	if (sorgente == -1) 
+	{
+   printf ("Errore in apertura file sorgente.\n");
+   return 0;
+	}
+	
+	for( i = 0 ; i < 3 ; ++i)
+	{
+		b = 1;
+		while (b)
+		{
+			if(read(sorgente, c , 1) == -1 )
+			{
+		 	printf ("Errore in lettura.\n");
+		 	return 0;
+			}
+
+			if( c[0] == '\n' )
+				b = 0 ;
+		}
+	}
+
+	system("clear");
+	printf("File condivisi dall'utente:\n\n");
+	while (read(sorgente , c , 1) > 0 )	
+	{
+
+		if( c[0] == '\n' )
+		{
+			if(list_dir(percorso , buffer_file) == 0)
+			{
+				printf("Errore in list_dir(%s)\n" , percorso);
+				return 0;
+			}
+			percorso[0] = '\0';
+		}
+		else
+		{
+			strcat(percorso , c);		
+		}
+	}
+	
+	close(sorgente);
+	return 1;
+	
+}
+
+
+int list_dir(char *percorso , Buffer_File * buffer_file )
+{
+	struct dirent **namelist;
+	struct stat data; 
+	char stringa[150] ;
+	int n; 
+	n = scandir(percorso, &namelist, 0, alphasort); 
+
+	if (n < 0)
+	{
+		perror("ERRORE scandir()"); 
+		return 0;
+	}	
+	else
+	{
+		while(n--)
+		{				
+			strcpy(stringa , percorso);
+
+		  strcat(stringa , namelist[n]->d_name) ;
+
+			stat(stringa , &data);
+			if (S_ISREG(data.st_mode)&& strchr( namelist[n]->d_name , (int)'~' ) == NULL)
+			{	
+				insert_MYfile( namelist[n]->d_name , buffer_file , stringa);
+				printf("---File: %s \n", stringa);
+			}
+		}
+		
+	}	
+ 
+	return 1;
+}
+
+int insert_MYfile( char *file , Buffer_File *buffer_file , char *percorso)
+{
+	md5_state_t hash_state;
+	char hash[16];
+	int index;
+                                              // prepare for a new hash
+  md5_init(&hash_state);
+  md5_append(&hash_state, file, strlen(file));
+                                              // calculate hash value	
+	md5_finish(&hash_state, hash);
+
+	index = buffer_file->index;
+		;
+	strcpy(buffer_file->filehash[index].file , hash);
+	strcpy(buffer_file->filehash[index].percorso , percorso);
+	buffer_file->index++;
+}
+
+
+//-------------------------------------------------------------------------------
+
+
+//--------------------Variabile Aleatoria X -------------------------------------
+
+X *initX() // inizializzo la struttura della variabile aleatoria X
+{
+	X *x ;
+	x = ( X *) malloc(sizeof(X));
+	int i  ;
+	
+	for(i = 0 ; i < _MAX_AGE ; ++i)
+	{
+		 x->intorno[i] = 0 ;
+	}
+	
+	if( _MAX_AGE >= 1)
+	{
+		x->estremo = (_P0 * _BIG_NUM ) ;
+		x->intorno[0] =  (_P0 * _BIG_NUM );
+	}
+
+	if( _MAX_AGE >= 2)
+	{
+		x->estremo = x->estremo + (_P1 * _BIG_NUM ) ;
+		x->intorno[1] = x->estremo  ;
+	}
+	
+	if( _MAX_AGE >= 3)
+	{
+		x->estremo = x->estremo + (_P2 * _BIG_NUM ) ;
+		x->intorno[2] = x->estremo  ;
+	}
+	
+	double temp;
+	for( i = 4 ; i <= _MAX_AGE ; ++i)
+	{
+		temp = (   ((double) 1)    /   (2 * i)    ) * _BIG_NUM;
+		//printf("temp = %f\n" , temp );
+		x->estremo = x->estremo + temp ;
+		x->intorno[i-1] = x->estremo ;
+	}
+	
+	
+	/*printf ("estremo = %d\n" , x->estremo );
+
+	for(i = 0 ; i < _MAX_AGE ; ++i)
+	{
+		printf("x[%d] = %d\n" , i , x->intorno[i]) ;
+
+	}*/
+	return x;
+}
+
+//-------------------------------------------------------------------------------
+
+
+//--------------------Buffer Neighbour ------------------------------------------
+
+Buffer_neighbour *init_buffer_neighbour()
+{
+	int i , j , w;
+	Buffer_neighbour *b;
+	b = (Buffer_neighbour *)malloc(sizeof(Buffer_neighbour ));
+	for( i = 0 ; i < _MAX_AGE ; ++i)
+	{
+		b->limit[i] = 0 ; 
+		for( j = 0 ; j < _VISTA_AGE ; ++j)
+		{
+			b->nodiAge[i].nodi_vicini[j].port = 0 ;
+			b->nodiAge[i].nodi_vicini[j].ip.s_addr = 0 ;
+	
+			for( w = 0 ; w < _MAX_HASH_VICINO ; ++w )
+			{	
+							strcpy(b->nodiAge[i].nodi_vicini[j].hash_file[w] , "") ;
+			}
+		}
+	
+	}
+	return b;
+}
+
+void reset_neighbour_age(int age , Buffer_neighbour *b)  //effettua il reset di una struct ListaAge
+{
+	int i , j;
+	
+	b->limit[age] = 0 ; 
+	for( i = 0 ; i < _VISTA_AGE ; ++i)
+		{
+			b->nodiAge[age].nodi_vicini[i].port = 0 ;
+			b->nodiAge[age].nodi_vicini[i].ip.s_addr = 0 ;
+	
+			for( j = 0 ; j < _MAX_HASH_VICINO ; ++j )
+			{	
+							strcpy(b->nodiAge[age].nodi_vicini[i].hash_file[j] , "") ;
+			}
+		}
+
+}
+
+//-------------------------------------------------------------------------------
+
+
+//--------------------Buffer Fanout ---------------------------------------------
+
+Buffer_fanout *init_buffer_fanout()
+{
+	Buffer_fanout *b ;
+	b = (Buffer_fanout *) malloc(sizeof(Buffer_fanout ) );
+	reset_buffer_fanout(b);
+	
+	return b ;
+}
+
+void reset_buffer_fanout(Buffer_fanout *b) //effettua il reset del buffer_fanout
+{
+	int i ;
+	b->limit = 0 ;
+	for( i = 0 ; i < _FANOUT ; ++i)
+	{
+		b->nodi[i].port = 0;
+		b->nodi[i].ip.s_addr = 0 ;
+	}
+	
+}
+
+
+//-------------------------------------------------------------------------------
+
+
+//--------------------Buffer Message---------------------------------------------
+
+Buffer_message *init_buffer_message()
+{
+	int i;
+	Buffer_message *b;
+	b = (Buffer_message *) malloc(sizeof(Buffer_message )) ;
+	
+	for(i = 0  ; i< _MAX_MSM ; ++i)
+	{
+		b->msg[i].age_time = 0 ;
+		strcpy(b->msg[i].id , "") ;
+	}
+	return b;
+}
+
+//-------------------------------------------------------------------------------
+
+
+//--------------------Buffer Event-----------------------------------------------
+
+Buffer_event *init_buffer_event()
+{
+	int i , j;
+	Buffer_event *b;
+	b = (Buffer_event *) malloc(sizeof(Buffer_event )) ;
+
+	strcpy(b->hashfile , "") ;
+	for(i = 0  ; i< _MAX_EVT ; ++i)
+	{
+		b->evt[i].age_time = 0 ;
+		strcpy(b->evt[i].id , "") ;
+		for( j = 0 ; j < _MAX_RESULT ; ++j ) 
+		{
+			b->evt[i].list_result[j].port = 0 ;
+			b->evt[i].list_result[j].ip.s_addr = 0 ;
+			
+		}
+	}
+	
+	return b; 
+}
+
+//-------------------------------------------------------------------------------
+
+
+//--------------------Buffer Round Speed-----------------------------------------
+
+Buffer_rs *init_buffer_rs()
+{
+	Buffer_rs *b ;
+	b = (Buffer_rs *) malloc (sizeof (Buffer_rs) ) ;
+	reset_buffer_rs(b);
+	
+	return b ;
+}
+
+void reset_buffer_rs(Buffer_rs *b) //effettua il reset del buffer_rs
+{
+	int i ;
+	b->limit =0 ;
+	for(i = 0 ; i < _MAX_RS ; ++i)
+	{
+		b->list_msg[i].ptr = NULL ;
+	}
+}
+
+
+//-------------------------------------------------------------------------------
+
+
+//--------------------Buffer Round Gossip----------------------------------------
+
+Buffer_rg *init_buffer_rg()
+{
+	
+	Buffer_rg *b ;
+	b = (Buffer_rg *) malloc (sizeof(Buffer_rg) ) ;
+	reset_buffer_rg(b);
+	return b ;
+}
+
+void reset_buffer_rg(Buffer_rg *b) //effettua il reset del buffer_rs
+{		
+		int i;
+		b->limit =0 ;
+		for(i = 0 ; i < _FANOUT ; ++i)
+		{
+			reset_gossip_inf2(&b->list_inf[i]);
+		}
+}
+
+//-------------------------------------------------------------------------------
+
+
+//-------------------0x79 Gossip_informations2-----------------------------------
+
+Gossip_informations2 *init_gossip_inf2()
+{
+	
+	Gossip_informations2 *g;
+	g = (Gossip_informations2 *) malloc (sizeof(Gossip_informations2 ) );
+	
+	reset_gossip_inf2(g);
+	
+	return g;
+}
+
+void reset_gossip_inf2(Gossip_informations2 *g) //effettua il reset del gossip informations2
+{
+	int i , j ;
+	strcpy(g->header.id, ""); //reset header
+	g->header.pay_desc = _INF2 ;
+	g->header.age = 0;
+	g->header.pay_lgth = sizeof(Gossip_informations2 );
+
+	g->port = 0; ;// porta
+	g->ip.s_addr = 0 ; // ipv4
+
+	for(j = 0 ; j < _MAX_HASH_VICINO ; ++j)
+	{
+				strcpy(g->hash_file[j], ""); 
+	}	
+	for(i = 0 ; i < _GOSSIP_NODI ; ++i)
+	{
+		g->list_neighbour[i].port = 0 ; 
+		g->list_neighbour[i].ip.s_addr = 0 ;
+		g->list_neighbour[i].age = 0 ;
+		for(j = 0 ; j < _MAX_HASH_VICINO ; ++j)
+		{
+				strcpy(g->list_neighbour[i].hash_file[j], ""); 
+		}	
+	}
+
+}
+
+//-------------------------------------------------------------------------------
+
+
+//-------------------Gossip_Message----------------------------------------------
+
+void reset_gossip_message(Gossip_message *g) //effettua il reset del gossip informations2
+{
+	int i ;
+	strcpy(g->header.id, ""); //reset header
+	g->header.pay_desc = _INF2 ;
+	g->header.age = 0;
+	g->header.pay_lgth = sizeof(Gossip_informations2 );
+
+	g->port = 0 ; 
+	g->ip.s_addr = 0 ;	
+	for( i = 0 ; i < _MAX_HASH_VICINO ; ++i)
+	{
+		strcpy(g->hash_file[i], ""); 
+	}
+
+}
+
+
+Gossip_message *init_gossip_message()
+{
+	Gossip_message *g;
+	g = (Gossip_message *) malloc (sizeof(Gossip_message ) );
+	reset_gossip_message(g);
+	return g;
+}
+

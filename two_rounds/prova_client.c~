@@ -1,0 +1,103 @@
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define SERV_PORT            5196
+#define MAXLINE              1024
+
+
+
+
+
+struct MSM
+{
+	int tipo;
+	char message[MAXLINE];
+	int length;
+};
+
+typedef struct MSM MSM ;
+
+
+// Inizializzazione della variabile sockaddr_in
+void addr_init (struct sockaddr_in *addr, int port, long int ip)  {
+        addr->sin_family=AF_INET;
+        addr->sin_port = htons ((u_short) port);
+        addr->sin_addr.s_addr=ip;
+}
+
+
+ MSM *create_MSM()
+{
+	MSM *buf ;
+	buf = (MSM * )  malloc( sizeof( MSM ) ) ;
+
+	buf->tipo = 0 ;
+	printf("Inserisci il testo del messaggio da passare al server: " ) ;
+ 	scanf("%s" , buf->message );
+
+	buf->length = strlen(buf->message);
+	return buf ;
+}
+
+main(int argc, char **argv)  
+{
+
+				
+
+        int sd;
+        int var1,var2,var3,var4;
+        int status;
+        pid_t pid;
+        struct sockaddr_in server,client;
+ 
+        // Controllo che vengano passati almeno due argomenti
+        if (argc < 2)  {
+                printf ("%s <server> <msg> -- %d \n",argv[0] , argc);
+                exit(1);
+        }
+ 
+        // Controllo che l'IP del server passato sia un indirizzo IPv4 valido
+        if (sscanf(argv[1],"%d.%d.%d.%d",&var1,&var2,&var3,&var4) != 4)  {
+                printf ("%s non è un indirizzo IPv4 valido\n",argv[1]);
+                exit(2);
+        }
+ // Inizializzazione dell'indirizzo
+        addr_init (&server,SERV_PORT,inet_addr(argv[1]));
+ 
+        // Creazione del socket
+        if ((sd=socket(AF_INET,SOCK_STREAM,0))<0)  {
+                printf ("Impossibile creare un socket TCP/IP\n");
+                exit(3);
+        }
+ 
+        // Creazione della connessione
+        if (connect(sd, (struct sockaddr*) &server, sizeof(server))<0)  {
+                printf ("Impossibile collegarsi al server %s sulla porta %d\n",inet_ntoa(server.sin_addr),SERV_PORT);
+                exit(4);
+        }
+ 
+        printf ("Connessione stabilita con successo con il server %s sulla porta %d\n",
+                        inet_ntoa(server.sin_addr), ntohs(server.sin_port));
+
+                
+								MSM *buf ; 
+								buf = create_MSM( );	
+								printf("\n-- %s\n" , buf->message);
+                // Invio al server il messaggio
+                send (sd,buf, sizeof(MSM) ,0);
+                printf ("MSM  inviato con successo al server %s\n", inet_ntoa(server.sin_addr));
+								
+								free(buf );
+
+ 
+        // Chiusura della connessione
+        close(sd);
+        exit(0);
+}
+

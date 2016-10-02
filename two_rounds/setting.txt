@@ -1,0 +1,6 @@
+/home/naftalina/Scrivania/tesi/2rounds/two_rounds/temp
+/home/naftalina/Scrivania/tesi/2rounds/two_rounds/download
+cartelle condivise:
+/home/naftalina/Scrivania/tesi/2rounds/two_rounds/file_condivisi/1/
+/home/naftalina/Scrivania/tesi/2rounds/two_rounds/file_condivisi/2/
+/home/naftalina/Scrivania/tesi/2rounds/two_rounds/file_condivisi/3/

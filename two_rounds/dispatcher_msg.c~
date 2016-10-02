@@ -1,0 +1,440 @@
+#include "header.h"
+
+struct dati_rhb
+{
+	in_port_t port ; // porta
+	struct in_addr ip ; // ipv4
+	in_port_t s_port ; // porta
+	struct in_addr s_ip ; // ipv4
+	char hash[16];
+};
+
+
+//------------- dispatcher gossip message ----------------------
+
+void *func_dispatcher_msg()
+{
+	int listensd ;
+  struct sockaddr_in servaddr ;
+  int t ;
+
+	if ((listensd = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
+  {
+  	perror("errore in socket");
+  	exit(1); 
+  }
+
+	memset((char *)&servaddr, 0, sizeof(servaddr));
+
+	addr_init(&servaddr,PORT1,INADDR_ANY);
+
+
+	if (bind(listensd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0) 
+  {
+  	perror("errore in bind");
+ 		exit(1); 
+  }
+
+  if (listen(listensd, BACKLOG) < 0 ) 
+  {
+  	perror("errore in listen");
+  	exit(1);
+  }
+	
+	if(_DEBUG)
+		printf("Creating disp_msg %lu\n", (unsigned long)pthread_self());		
+	
+	pthread_t threads[THREADS_MSG];
+
+	
+
+	for(t=0;t < THREADS_MSG;t++)
+	{
+		int rc ;
+
+  	rc = pthread_create (&threads[t], NULL, func_helper_msg, (void *)listensd);
+  	if (rc)
+		{
+     	printf("ERROR; return code from pthread_create() is %d\n",rc);
+     	exit(-1);
+  	}
+	}
+	sem_post(sem_init_msg);
+	
+	sem_wait(sem_exit_msg);
+	for(t=0;t < THREADS_MSG;t++)
+	{
+  	pthread_cancel(threads[t] );
+	}				
+	close(listensd);
+	pthread_exit(NULL);
+}
+//--------------------------------------------------------------
+
+
+//------------- helper ----------------------
+
+void *func_helper_msg(void *l)
+{	
+	int listensd = (int)l ;
+	int                 connsd;
+	struct sockaddr_in cliaddr;
+  int                len;
+
+
+	len = sizeof(struct sockaddr_in);
+
+	if(_DEBUG)
+		printf("Creating thread_msg %lu\n", (unsigned long)pthread_self());		
+	
+	for ( ; ; ) 
+	{
+		Gossip_message *buff;	
+		len = sizeof(struct sockaddr_in);
+		memset((char *)&cliaddr, 0, len);
+		
+		sem_wait(sem_accept_msg);
+			if ((connsd = accept(listensd, (struct sockaddr *)&cliaddr, (socklen_t *)&len)) < 0) 
+			{
+   			perror("errore in accept");
+   			exit(1);
+ 			}
+		sem_post(sem_accept_msg);
+		
+		// Alloco memoria per ricevere il messaggio
+    buff = (Gossip_message*) malloc(sizeof(Gossip_message));
+
+    // Ricevo il gossip_information
+    recv(connsd,buff,sizeof(Gossip_message),0);
+
+		if(_DEBUG)
+		{
+			printf("\n\n-------Ricevuto gossip message---------\n");
+			stampa_Gossip_message(buff);
+			printf("\n--------------------------------------------\n");
+		}
+		char c ;
+		c = buff->header.pay_desc ;
+
+
+	switch(c) {
+	/* 
+	 * Handling options 
+	 */ 
+	case _BOOT_PING2 :  /* messaggio di ping */
+	helper_ping(buff)	;			
+	break;
+
+	case _BOOT_PONG2 :  /* messaggio di pong */
+	helper_pong(buff);				
+	break;
+
+	case _BYE:  /* messaggio di bye */
+	helper_bye(buff);				
+	break;
+
+	case _QUERY:  /* messaggio di query */
+	helper_query(buff);
+	break;
+	
+	case _QUERY_HITS:  /* messaggio di query_hit */
+	helper_query_hit(buff);				
+	break;
+
+	default:	/* scarto il pacchetto */
+	free(buff);
+	break; 
+	}		
+		
+		close(connsd);
+	}
+	pthread_exit(NULL);
+}
+
+void helper_ping(Gossip_message *buff)
+{
+	Gossip_message msg_pong;
+	gossip_pong(&msg_pong);
+	
+	if(searchInsert_id_buffer_message(buff->header.id , buffer_message) ) // se il messaggio è presente nel buffer_message lo scarto
+	{
+			free(buff);
+	}
+	else
+	{
+		if(buff->header.age == 0) // se ha age 0 lo inserisco e invio il pong
+		{
+			insert_peer_BNeighbour( buffer_neighbour , buff->port , buff->ip , buff->hash_file);
+
+			int sd;
+  		struct sockaddr_in server;
+			
+			memset((char *)&server, 0, sizeof(server));
+			server.sin_family=AF_INET;
+			server.sin_port = buff->port;
+			server.sin_addr.s_addr= buff->ip.s_addr;
+	
+			
+			// Creazione del socket
+			if ((sd=socket(AF_INET,SOCK_STREAM,0))<0)  {
+	        printf ("Impossibile creare un socket TCP/IP\n");
+	        exit(3);
+			}
+
+			// Creazione della connessione
+			if (connect(sd, (struct sockaddr*) &server, sizeof(server))<0)  {
+					    printf ("Impossibile collegarsi al peer %s sulla porta %d\n",inet_ntoa(server.sin_addr),server.sin_port);
+					    exit(4);
+			}
+
+			send(sd,&msg_pong, sizeof(Gossip_message) ,0);
+			if(_DEBUG)
+			{
+				printf("\n\n-------Inviato un gossip message---------\n");
+				stampa_Gossip_message(&msg_pong);
+				printf("\n--------------------------------------------\n");
+			}
+			close(sd);
+			
+			
+		}
+		else // se ha age > 0
+		{	
+			int age;
+			age = random_age(var_x , 1);
+			if(age == buff->header.age) // scelta semi-casuale sull'invio del pong
+			{
+				insert_peer_BNeighbour( buffer_neighbour , buff->port , buff->ip , buff->hash_file);
+		
+				int sd;
+				struct sockaddr_in server;
+	
+				memset((char *)&server, 0, sizeof(server));
+				server.sin_family=AF_INET;
+				server.sin_port = buff->port;
+				server.sin_addr.s_addr= buff->ip.s_addr;
+
+				// Creazione del socket
+				if ((sd=socket(AF_INET,SOCK_STREAM,0))<0)  {
+		        printf ("Impossibile creare un socket TCP/IP\n");
+		        exit(3);
+				}
+
+				// Creazione della connessione
+				if (connect(sd, (struct sockaddr*) &server, sizeof(server))<0)  {
+						    printf ("Impossibile collegarsi al peer %s sulla porta %d\n",inet_ntoa(server.sin_addr),server.sin_port);
+						    exit(4);
+				}
+
+				//send(sd,msg_pong, sizeof(Gossip_message) ,0);
+		
+
+				close(sd);
+
+
+				if(buff->header.age < _MAX_AGE)
+				{
+					insert_messageRS(buff); // inserisco il messaggio nel buffer_rs l'incremento di age è implementato nella funzione insert_message_rs 
+				}	
+				else
+				{
+						free(buff);
+				}
+			}
+			else // se non è stato inviato il pong
+			{
+				if(buff->header.age < _MAX_AGE)
+				{
+					insert_messageRS(buff); // inserisco il messaggio nel buffer_rs l'incremento di age è implementato nella funzione insert_message_rs 
+				}	
+				else
+				{
+						free(buff);
+				}
+			}
+		}
+	}	
+}
+
+void helper_pong(Gossip_message *buff)
+{
+	insert_peer_BNeighbour( buffer_neighbour , buff->port , buff->ip , buff->hash_file); //inserisco il peer nel  buffer_neighbour
+	free(buff);
+}
+
+void helper_bye(Gossip_message *buff)
+{
+
+	if(searchInsert_id_buffer_message(buff->header.id , buffer_message) ) // se il messaggio è presente nel buffer_message lo scarto
+	{
+			free(buff);
+	}
+	else
+	{
+		if(search_peer_buffer_neighbour(buffer_neighbour , buff->port , buff->ip))
+		{
+				delete_peer_buffer_neighbour(buffer_neighbour , buff->port , buff->ip);
+		}
+		if(buff->header.age < _MAX_AGE)
+		{
+			insert_messageRS(buff); // inserisco il messaggio nel buffer_rs l'incremento di age è implementato nella funzione insert_message_rs 
+		}	
+		else
+		{
+				free(buff);
+		}
+
+	}
+
+}
+
+void helper_query(Gossip_message *buff)
+{
+	if(searchInsert_id_buffer_message(buff->header.id , buffer_message) ) // se il messaggio è presente nel buffer_message lo scarto
+	{
+			free(buff);
+	}
+	else
+	{
+		if(search_hashfile(buff->hash_file[0]) ) //se ho la risorsa richieta
+		{
+			int sd;
+  		struct sockaddr_in server;
+	
+			memset((char *)&server, 0, sizeof(server));
+			server.sin_family=AF_INET;
+  		server.sin_port = buff->port;
+  		server.sin_addr.s_addr= buff->ip.s_addr;
+
+			Gossip_message *msg_query_hit;
+			msg_query_hit = gossip_query_hit( buff->header.id);
+
+			// Creazione del socket
+			if ((sd=socket(AF_INET,SOCK_STREAM,0))<0)  {
+        printf ("Impossibile creare un socket TCP/IP\n");
+        exit(3);
+			}
+
+			// Creazione della connessione
+			if (connect(sd, (struct sockaddr*) &server, sizeof(server))<0)  {
+				      printf ("Impossibile collegarsi al peer %s sulla porta %d\n",inet_ntoa(server.sin_addr),server.sin_port);
+				      exit(4);
+			}
+			send (sd,msg_query_hit, sizeof(Gossip_message) ,0); //invio un gossip_query_hit comunicando al peer che ho la risorsa
+			free(msg_query_hit);
+			close(sd);
+  	}
+		
+		ResultHashBneighbour *rhb;
+		rhb = init_reult_hash_Bneighbour();
+		search_hash_buffer_neighbour(buffer_neighbour , rhb , buff->hash_file[0] ); // controllo se i peer neighbour hanno la risorsa
+	
+		pthread_t *th_rhb;
+		th_rhb = (pthread_t *) malloc( sizeof(pthread_t) * rhb->limit ); 
+		int t = 0;
+
+		for(t=0;t < rhb->limit;t++)
+		{
+			int rc ;
+
+			struct dati_rhb *d ;
+			d = (struct dati_rhb*) malloc (sizeof(struct dati_rhb )) ;
+			d->port = rhb->list[t].port ;
+			d->ip.s_addr = rhb->list[t].ip.s_addr;
+			d->s_port = buff->port ;
+			d->s_ip.s_addr = buff->ip.s_addr;
+			strncpy(d->hash , buff->hash_file[0] , 16) ;
+ 			
+			rc = pthread_create(&th_rhb[t], NULL, func_helper_msg, (void *)d); //invio ai neighbour che hanno la risorsa un gossip_query con age _RAGGIO_QUERY
+			if (rc)
+			{
+		   	printf("ERROR; return code from pthread_create() is %d\n",rc);
+		   	exit(-1);
+			}
+		}
+			
+		if(buff->header.age < _RAGGIO_QUERY) //se l'age del gossip_query ricevuto è minore di _RAGGIO_QUERY lo inserisco nel buffer_RS 
+		{
+			insert_messageRS(buff);
+		}
+		else
+		{
+				free(buff);
+		}
+		
+		for(t = 0 ;t < rhb->limit ; ++t)
+		{
+    	pthread_join(th_rhb[t], NULL );
+  	}			
+		free(rhb);
+	}
+}
+
+
+void *func_helper_rhb( void *d)
+{
+	struct dati_rhb *dati;
+	dati = (struct dati_rhb *) d;
+	int sd;
+	struct sockaddr_in server;
+	memset((char *)&server, 0, sizeof(server));
+	server.sin_family=AF_INET;
+  server.sin_port = dati->port;
+  server.sin_addr.s_addr = dati->ip.s_addr;	
+
+	// Creazione del socket
+  if ((sd=socket(AF_INET,SOCK_STREAM,0))<0)  {
+          printf ("Impossibile creare un socket TCP/IP\n");
+          exit(3);
+  }
+
+  // Creazione della connessione
+  if (connect(sd, (struct sockaddr*) &server, sizeof(server))<0)  {
+          printf ("Impossibile collegarsi al peer %s sulla porta %d\n",inet_ntoa(server.sin_addr),server.sin_port);
+          exit(4);
+  }
+
+	Gossip_message *msg ;
+	msg = gossip_query( dati->hash);
+	msg->header.age = _RAGGIO_QUERY;
+	msg->port = dati->s_port;
+	msg->ip.s_addr = dati->s_ip.s_addr;	
+
+	send(sd,msg, sizeof(Gossip_message) ,0);
+	free(dati);
+	close(sd);
+	pthread_exit(NULL);
+}
+
+void helper_query_hit(Gossip_message *buff)
+{
+	int i , j;
+	int b = 1;
+	// procedura per l'inserimento del gossip_query_hit nel buffer event 	
+	lock_Two_rooms(sem_event);
+		for( i = 0 ; i < _MAX_EVT && buffer_event->evt[i].limit < _MAX_RESULT ; ++i )
+		{
+			if(strncmp(buffer_event->evt[i].id , buff->header.id , _ID_M) == 0 )
+			{
+				for( j = 0 ; j < buffer_event->evt[i].limit ; ++j)
+				{
+					if(buffer_event->evt[i].list_result[j].port == buff->port && buffer_event->evt[i].list_result[j].ip.s_addr == buff->ip.s_addr)
+					{
+						b = 0 ;
+						j =  _MAX_RESULT;
+					}
+				}
+				
+				if(b)
+				{
+					buffer_event->evt[i].list_result[buffer_event->evt[i].limit].port = buff->port ;
+					buffer_event->evt[i].list_result[buffer_event->evt[i].limit].ip.s_addr = buff->ip.s_addr ;
+				}				
+				i = _MAX_EVT ;
+			}
+		}
+	unlock_Two_rooms(sem_event);
+	free(buff);
+}
+
+//--------------------------------------------------------------
